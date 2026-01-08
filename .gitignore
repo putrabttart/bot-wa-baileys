@@ -1,3 +1,14 @@
-.env
-.env.*
+# Backup & temp
+backup/
+backup/**
+
+# Baileys auth/session
+baileys_auth/
+baileys_auth/**
+auth_info/
+auth_info/**
+sessions/
+sessions/**
+
+# Node
 node_modules/
