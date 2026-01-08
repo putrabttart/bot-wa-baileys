@@ -12,3 +12,5 @@ sessions/**
 
 # Node
 node_modules/
+.env
+.env.*

@@ -422,14 +422,6 @@ export function installCommandHandler(client) {
           return;
         }
 
-        // Bot juga harus admin agar bisa ubah setting grup
-        const botIsAdmin = await isSelfAdminInThisGroup(client, chat);
-        if (!botIsAdmin) {
-          await msg.reply('Aku belum jadi *Admin* di grup ini, tidak bisa ubah pengaturan. Jadikan admin dulu ya.');
-          try { await msg.react('❌'); } catch {}
-          return;
-        }
-
         try { await msg.react('⏳'); } catch {}
 
         try {
@@ -443,8 +435,13 @@ export function installCommandHandler(client) {
           }
           try { await msg.react('✅'); } catch {}
         } catch (err) {
-          console.error('Error #open/#close:', err);
-          await msg.reply('Gagal mengubah pengaturan kirim pesan grup. Cek versi Baileys atau izin admin.');
+          console.error('Error #open/#close:', err?.message || err);
+          const botIsAdmin = await isSelfAdminInThisGroup(client, chat).catch(()=>false);
+          if (!botIsAdmin) {
+            await msg.reply('Aku belum jadi *Admin* di grup ini, tidak bisa ubah pengaturan. Jadikan admin dulu ya.');
+          } else {
+            await msg.reply('Gagal mengubah pengaturan kirim pesan grup. Coba lagi atau cek izin admin.');
+          }
           try { await msg.react('❌'); } catch {}
         }
         return;
@@ -469,10 +466,8 @@ export function installCommandHandler(client) {
         const batches = chunk(idsAll, 90);
         for (const idsBatch of batches) {
           const mentions = await Promise.all(idsBatch.map(id => client.getContactById(id)));
-          const tagsLine = idsBatch.map(id => '@' + String(id).split('@')[0]).join(' ');
-          const textOut = messageText + '\n' + tagsLine;
-          await chat.sendMessage(textOut, { mentions });
-          await new Promise(r => setTimeout(r, 700)); // throttle sedikit agar stabil
+          await chat.sendMessage(messageText, { mentions });
+          await new Promise(r => setTimeout(r, 600)); // throttle kecil
         }
 
         try { await msg.react('✅'); } catch {}

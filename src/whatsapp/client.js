@@ -264,8 +264,19 @@ class BaileysClient {
   }
 
   async getGroupMeta(jid) {
-    try { return await this.sock?.groupMetadata(normalizeJid(jid)); }
-    catch { return { id: normalizeJid(jid), participants: [] }; }
+    try {
+      const meta = await this.sock?.groupMetadata(normalizeJid(jid));
+      if (meta?.participants) {
+        meta.participants = meta.participants.map(p => ({
+          ...p,
+          id: normalizeJid(p.id)
+        }));
+      }
+      return meta;
+    }
+    catch {
+      return { id: normalizeJid(jid), participants: [] };
+    }
   }
 
   async destroy() {
