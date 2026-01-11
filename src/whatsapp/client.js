@@ -133,6 +133,8 @@ class BaileysClient {
     this.state = null;
     this.saveCreds = null;
     this._resetting = false;
+    this._reconnecting = false;
+    this._reconnectAttempts = 0;
     console.log('[Auth] Folder sesi:', this.authDir);
   }
 
@@ -145,6 +147,8 @@ class BaileysClient {
   }
 
   async startSocket() {
+    // reset reconnect flags when we start a fresh socket
+    this._reconnecting = false;
     const { version } = await fetchLatestBaileysVersion();
     const sock = makeWASocket({
       version,
@@ -185,6 +189,7 @@ class BaileysClient {
 
     if (connection === 'open') {
       this.info.wid._serialized = normalizeJid(this.sock?.user?.id || '');
+      this._reconnectAttempts = 0;
       this.emit('ready');
       return;
     }
@@ -196,9 +201,28 @@ class BaileysClient {
       if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
         await this.resetAuthAndReconnect();
       } else if (shouldReconnect) {
-        await this.startSocket();
+        await this.scheduleReconnect();
       }
     }
+  }
+
+  async scheduleReconnect() {
+    if (this._reconnecting) return;
+    this._reconnecting = true;
+    this._reconnectAttempts = Math.min(this._reconnectAttempts + 1, 10);
+    const delayMs = Math.min(1000 * Math.pow(2, this._reconnectAttempts - 1), 15000); // 1s,2s,4s.. max 15s
+    console.warn(`[WA] Reconnect attempt #${this._reconnectAttempts} in ${delayMs}ms`);
+    try { this.sock?.end?.(); this.sock?.ws?.close?.(); } catch {}
+    setTimeout(async () => {
+      try {
+        await this.startSocket();
+      } catch (e) {
+        console.error('[WA] Reconnect failed:', e?.message || e);
+        this._reconnecting = false;
+        // schedule next attempt
+        await this.scheduleReconnect();
+      }
+    }, delayMs);
   }
 
   async handleMessages({ messages, type }) {

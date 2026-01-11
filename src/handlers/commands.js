@@ -19,6 +19,16 @@ const chunk = (arr, size = 90) => {
   return out;
 };
 
+// Infer stock sheet/tab name for GAS from product information
+const _safe = (s='') => (s || '').toLowerCase().replace(/[^a-z0-9_]+/g, '');
+const inferStockSheet = (p) => {
+  const code = _safe(p?.kode || '');
+  const cat = (p?.kategori || '').toLowerCase();
+  const name = (p?.nama || '').toLowerCase();
+  const isTemplate = /template|tpl/.test(code) || /template/.test(cat) || /template/.test(name);
+  return `${isTemplate ? 'template' : 'stok'}_${code}`;
+};
+
 /* ================= Commands ================= */
 const COMMANDS = [
   '#menu', '#ping', '#kategori', '#list', '#stok', '#harga', '#detail',
@@ -251,10 +261,16 @@ export function installCommandHandler(client) {
           return;
         }
 
-        const reserve = await reserveStock({ kode: p.kode, qty, order_id, buyer_jid: from });
+        const sheetHint = inferStockSheet(p);
+        const reserve = await reserveStock({ kode: p.kode, qty, order_id, buyer_jid: from, sheet_hint: sheetHint });
         if (!reserve.ok) {
-          // Provide diagnostic message to help identify root cause (secret mismatch, unknown code, etc.)
-          const detail = reserve?.msg ? `\n(${reserve.msg})` : '';
+          // Provide diagnostic message to help identify root cause and sheet used
+          const parts = [];
+          if (reserve?.msg) parts.push(reserve.msg);
+          if (reserve?.available !== undefined) parts.push(`tersedia: ${reserve.available}`);
+          if (reserve?.needed !== undefined) parts.push(`dibutuhkan: ${reserve.needed}`);
+          if (reserve?.sheet || sheetHint) parts.push(`sumber: ${reserve.sheet || sheetHint}`);
+          const detail = parts.length ? `\n(${parts.join(', ')})` : '';
           console.warn('[Stock] Reserve failed:', { kode: p.kode, qty, order_id, resp: reserve });
           await msg.reply('Maaf, stok tidak mencukupi. Coba kurangi jumlah / pilih produk lain.' + detail);
           try { await msg.react('❌'); } catch {}
