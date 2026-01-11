@@ -243,8 +243,23 @@ export function installCommandHandler(client) {
           promoInfo = '\n( Promo data belum dikonfigurasi )';
         }
 
+        // Pre-check based on loaded sheet data; continue to GAS for authoritative reservation
+        const currentStock = Number(p.stok || 0) || 0;
+        if (currentStock <= 0 || qty > currentStock) {
+          await msg.reply('Maaf, stok tidak mencukupi menurut data saat ini. Coba kurangi jumlah / pilih produk lain.');
+          try { await msg.react('❌'); } catch {}
+          return;
+        }
+
         const reserve = await reserveStock({ kode: p.kode, qty, order_id, buyer_jid: from });
-        if (!reserve.ok) { await msg.reply('Maaf, stok tidak mencukupi. Coba kurangi jumlah / pilih produk lain.'); try { await msg.react('❌'); } catch {} return; }
+        if (!reserve.ok) {
+          // Provide diagnostic message to help identify root cause (secret mismatch, unknown code, etc.)
+          const detail = reserve?.msg ? `\n(${reserve.msg})` : '';
+          console.warn('[Stock] Reserve failed:', { kode: p.kode, qty, order_id, resp: reserve });
+          await msg.reply('Maaf, stok tidak mencukupi. Coba kurangi jumlah / pilih produk lain.' + detail);
+          try { await msg.react('❌'); } catch {}
+          return;
+        }
 
         // simpan meta order (tambahkan toDelete untuk menyimpan pesan yang akan dihapus)
         ORDERS.set(order_id, {
