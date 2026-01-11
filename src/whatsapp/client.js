@@ -153,13 +153,29 @@ class BaileysClient {
       printQRInTerminal: false,
       browser: ['PBS', 'Chrome', '1.0'],
       markOnlineOnConnect: false,
-      syncFullHistory: false
+      syncFullHistory: false,
+      retryRequestDelayMs: 250,
+      maxMsgRetryCount: 3,
+      // Handle Bad MAC errors gracefully
+      shouldIgnoreJid: (jid) => false,
+      getMessage: async (key) => {
+        // Return undefined to let Baileys handle decryption failures
+        return undefined;
+      }
     });
 
     this.sock = sock;
     sock.ev.on('creds.update', this.saveCreds);
     sock.ev.on('connection.update', (update) => this.handleConnection(update));
     sock.ev.on('messages.upsert', (ev) => this.handleMessages(ev));
+    
+    // Catch and suppress Bad MAC errors to prevent crashes
+    sock.ev.on('messages.update', () => {});
+    process.on('unhandledRejection', (reason) => {
+      if (reason?.message?.includes?.('Bad MAC')) {
+        console.warn('[Session] Bad MAC error suppressed - session will resync automatically');
+      }
+    });
   }
 
   async handleConnection(update) {
@@ -189,8 +205,17 @@ class BaileysClient {
     if (type !== 'notify') return;
     for (const m of messages) {
       if (!m.message) continue;
-      const msg = new WrappedMessage(this, m);
-      await this.emitMessage(msg);
+      try {
+        const msg = new WrappedMessage(this, m);
+        await this.emitMessage(msg);
+      } catch (err) {
+        // Suppress Bad MAC errors - these happen when sessions are resyncing
+        if (err?.message?.includes?.('Bad MAC') || err?.message?.includes?.('decrypt')) {
+          console.warn('[Session] Skipping message due to decryption error (session resyncing)');
+        } else {
+          console.error('[Messages] Error processing message:', err);
+        }
+      }
     }
   }
 

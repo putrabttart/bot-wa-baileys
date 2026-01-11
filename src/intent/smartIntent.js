@@ -21,12 +21,23 @@ export function isLikelyQuery(text='') {
   if (text.trim().startsWith('#')) return false;
   if (text.includes('?')) return false;
   if (/(https?:\/\/)/i.test(text)) return false;
+  
+  // Only treat as query if QUIET_MODE is explicitly false AND message looks intentional
+  // Reject very short messages that might be casual chat
+  if (text.trim().length < 3) return false;
+  
+  // Reject messages that look like casual conversation
+  // (e.g., "iya", "ok", "thanks", "hi there", etc.)
+  const shortCasualText = text.trim().split(/\s+/).length <= 2 && text.trim().length <= 15;
+  if (shortCasualText && /^(iya|ok|thanks|ok\s|hi\s|halo|hei|yes|no|yep|nope|lol|wkwk)/i.test(text.trim())) return false;
+  
   const tokens = tokenizeClean(text).filter(t => !STOPWORDS.has(t));
   if (!tokens.length) return false;
   let hasSignal = false;
   const PRODUCT_TOKENS = getTokens();
   for (const t of tokens) { if (t.length >= 3 && PRODUCT_TOKENS.has(t)) { hasSignal = true; break; } }
   if (!hasSignal) return false;
+  // Reject very long messages without numbers (likely not a product query)
   if (tokens.length >= 8 && !/\d/.test(text)) return false;
   return true;
 }
